@@ -72,49 +72,51 @@ class MoonLander {
     generateTerrain() {
         this.terrain = [];
         this.craters = [];
-        this.rocks = [];
-        const segments = 120; // More segments for detail
+        const segments = 100;
         const segmentWidth = this.width / segments;
-        const baseY = this.height - 100;
+        const baseY = this.height - 80;
         
-        // Generate realistic moon terrain with hard angles
+        // Generate realistic moon terrain - mostly flat with gentle rolling hills and occasional craters
         let currentY = baseY;
-        let currentSlope = 0;
+        let slopeDirection = 0;
+        let flatStretch = 0;
         
         for (let i = 0; i <= segments; i++) {
             const x = i * segmentWidth;
             
-            // Randomly change slope to create hard angles
-            if (Math.random() < 0.15) {
-                const angles = [0, 30, 45, 60, 70, 90, -30, -45, -60, -70, -90];
-                const angle = angles[Math.floor(Math.random() * angles.length)];
-                currentSlope = Math.tan(angle * Math.PI / 180) * 20;
+            // Create flat stretches more frequently
+            if (flatStretch > 0) {
+                // Continue flat surface
+                flatStretch--;
+                currentY += (Math.random() - 0.5) * 2; // Very small variation
+            } else {
+                // Randomly start a flat stretch
+                if (Math.random() < 0.3) {
+                    flatStretch = 8 + Math.floor(Math.random() * 12); // 8-20 segments of flat terrain
+                }
+                
+                // Gentle slope changes - moon has rolling hills, not sharp peaks
+                if (Math.random() < 0.1) {
+                    slopeDirection = (Math.random() - 0.5) * 0.8; // Very gentle slopes
+                }
+                
+                // Apply gentle slope and small random variation
+                currentY += slopeDirection + (Math.random() - 0.5) * 8;
             }
             
-            // Apply slope and add some variation
-            currentY += currentSlope + (Math.random() - 0.5) * 10;
-            
-            // Keep within bounds
-            currentY = Math.max(this.height * 0.3, Math.min(this.height - 50, currentY));
+            // Keep terrain in reasonable bounds - no extreme heights
+            currentY = Math.max(this.height * 0.7, Math.min(this.height - 60, currentY));
             
             this.terrain.push({ x, y: currentY });
             
-            // Add craters randomly
-            if (Math.random() < 0.08 && i > 5 && i < segments - 10) {
+            // Add occasional craters (less frequent)
+            if (Math.random() < 0.04 && i > 8 && i < segments - 8) {
                 this.addCrater(i, segments);
-            }
-            
-            // Add rocks
-            if (Math.random() < 0.05) {
-                this.rocks.push({
-                    x: x + (Math.random() - 0.5) * segmentWidth,
-                    y: currentY - Math.random() * 20,
-                    size: 3 + Math.random() * 8
-                });
+                flatStretch = 0; // Reset flat stretch after crater
             }
         }
         
-        // Smooth out some extreme angles for playability
+        // Light smoothing to ensure no impossible slopes
         this.smoothTerrain();
     }
     
@@ -149,8 +151,8 @@ class MoonLander {
             const curr = this.terrain[i].y;
             const next = this.terrain[i + 1].y;
             
-            // If slope is too extreme, moderate it slightly
-            const maxChange = 40;
+            // If slope is too extreme, moderate it slightly - moon terrain is gentler
+            const maxChange = 25;
             if (Math.abs(curr - prev) > maxChange) {
                 this.terrain[i].y = prev + Math.sign(curr - prev) * maxChange;
             }
@@ -284,7 +286,7 @@ class MoonLander {
     
     checkFlatSurface(landerX) {
         const landerWidth = this.lander.width * 0.8; // Check area slightly smaller than lander
-        const segmentWidth = this.width / 120; // Updated for new segment count
+        const segmentWidth = this.width / 100; // Updated for new segment count
         const centerSegment = Math.floor(landerX / segmentWidth);
         const checkRadius = Math.ceil(landerWidth / segmentWidth / 2);
         
@@ -298,8 +300,8 @@ class MoonLander {
         
         if (points.length < 3) return false;
         
-        // Check if surface is relatively flat
-        const maxHeightDiff = 20; // Maximum height difference allowed (slightly more lenient)
+        // Check if surface is relatively flat - more lenient since terrain is gentler
+        const maxHeightDiff = 15; // Maximum height difference allowed
         const minY = Math.min(...points.map(p => p.y));
         const maxY = Math.max(...points.map(p => p.y));
         
@@ -496,34 +498,6 @@ class MoonLander {
             }
         }
         
-        // Draw rocks
-        this.ctx.fillStyle = '#9ca3af';
-        this.rocks.forEach(rock => {
-            this.ctx.beginPath();
-            this.ctx.arc(rock.x, rock.y, rock.size, 0, Math.PI * 2);
-            this.ctx.fill();
-            
-            // Rock shadow
-            this.ctx.fillStyle = '#4b5563';
-            this.ctx.beginPath();
-            this.ctx.ellipse(rock.x + rock.size * 0.3, rock.y + rock.size, rock.size * 0.8, rock.size * 0.3, 0, 0, Math.PI * 2);
-            this.ctx.fill();
-            this.ctx.fillStyle = '#9ca3af';
-        });
-        
-        // Highlight flat landing areas
-        this.ctx.strokeStyle = '#fbbf24';
-        this.ctx.lineWidth = 1;
-        for (let i = 0; i < this.terrain.length - 5; i++) {
-            if (this.checkFlatSurface(this.terrain[i].x)) {
-                const segment = Math.min(5, this.terrain.length - i - 1);
-                this.ctx.beginPath();
-                this.ctx.moveTo(this.terrain[i].x, this.terrain[i].y);
-                this.ctx.lineTo(this.terrain[i + segment].x, this.terrain[i + segment].y);
-                this.ctx.stroke();
-                i += segment; // Skip ahead to avoid overlapping highlights
-            }
-        }
         
         
         // Draw particles
