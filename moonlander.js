@@ -35,7 +35,7 @@ class MoonLander {
         
         // Background elements
         this.stars = [];
-        this.earth = { x: 100, y: 80, radius: 30 };
+        this.earth = { x: 100, y: 80, radius: 50 }; // Larger Earth
         
         // Explosion particles
         this.particles = [];
@@ -71,34 +71,103 @@ class MoonLander {
     
     generateTerrain() {
         this.terrain = [];
-        const segments = 80;
+        this.craters = [];
+        this.rocks = [];
+        const segments = 120; // More segments for detail
         const segmentWidth = this.width / segments;
+        const baseY = this.height - 100;
         
-        // Create base terrain with some variation
+        // Generate realistic moon terrain with hard angles
+        let currentY = baseY;
+        let currentSlope = 0;
+        
         for (let i = 0; i <= segments; i++) {
             const x = i * segmentWidth;
-            let y = this.height - 80 + Math.sin(i * 0.1) * 30;
             
-            // Add some craters
-            if (i % 15 === 0 && i > 10 && i < segments - 10) {
-                y += Math.random() * 40 - 20;
+            // Randomly change slope to create hard angles
+            if (Math.random() < 0.15) {
+                const angles = [0, 30, 45, 60, 70, 90, -30, -45, -60, -70, -90];
+                const angle = angles[Math.floor(Math.random() * angles.length)];
+                currentSlope = Math.tan(angle * Math.PI / 180) * 20;
             }
             
-            this.terrain.push({ x, y });
+            // Apply slope and add some variation
+            currentY += currentSlope + (Math.random() - 0.5) * 10;
+            
+            // Keep within bounds
+            currentY = Math.max(this.height * 0.3, Math.min(this.height - 50, currentY));
+            
+            this.terrain.push({ x, y: currentY });
+            
+            // Add craters randomly
+            if (Math.random() < 0.08 && i > 5 && i < segments - 10) {
+                this.addCrater(i, segments);
+            }
+            
+            // Add rocks
+            if (Math.random() < 0.05) {
+                this.rocks.push({
+                    x: x + (Math.random() - 0.5) * segmentWidth,
+                    y: currentY - Math.random() * 20,
+                    size: 3 + Math.random() * 8
+                });
+            }
         }
         
+        // Smooth out some extreme angles for playability
+        this.smoothTerrain();
+    }
+    
+    addCrater(centerIndex, totalSegments) {
+        const craterWidth = 5 + Math.random() * 15;
+        const craterDepth = 20 + Math.random() * 40;
+        const startIndex = Math.max(0, centerIndex - Math.floor(craterWidth / 2));
+        const endIndex = Math.min(totalSegments, centerIndex + Math.floor(craterWidth / 2));
+        
+        const crater = {
+            x: this.terrain[centerIndex].x,
+            y: this.terrain[centerIndex].y,
+            width: craterWidth * (this.width / totalSegments),
+            depth: craterDepth
+        };
+        this.craters.push(crater);
+        
+        // Create crater shape
+        for (let i = startIndex; i <= endIndex; i++) {
+            if (i < this.terrain.length) {
+                const progress = Math.abs(i - centerIndex) / (craterWidth / 2);
+                const craterY = this.terrain[i].y + craterDepth * Math.cos(progress * Math.PI / 2);
+                this.terrain[i].y = Math.max(this.terrain[i].y, craterY);
+            }
+        }
+    }
+    
+    smoothTerrain() {
+        // Light smoothing to prevent impossible slopes
+        for (let i = 1; i < this.terrain.length - 1; i++) {
+            const prev = this.terrain[i - 1].y;
+            const curr = this.terrain[i].y;
+            const next = this.terrain[i + 1].y;
+            
+            // If slope is too extreme, moderate it slightly
+            const maxChange = 40;
+            if (Math.abs(curr - prev) > maxChange) {
+                this.terrain[i].y = prev + Math.sign(curr - prev) * maxChange;
+            }
+        }
     }
     
     generateStars() {
         this.stars = [];
-        const starCount = Math.min(200, Math.floor((this.width * this.height) / 5000));
+        const starCount = Math.min(500, Math.floor((this.width * this.height) / 2000)); // More stars
         for (let i = 0; i < starCount; i++) {
             this.stars.push({
                 x: Math.random() * this.width,
-                y: Math.random() * (this.height * 0.7),
+                y: Math.random() * (this.height * 0.8), // Stars higher up too
                 brightness: Math.random(),
-                twinkleSpeed: 0.02 + Math.random() * 0.03,
-                twinklePhase: Math.random() * Math.PI * 2
+                twinkleSpeed: 0.01 + Math.random() * 0.02,
+                twinklePhase: Math.random() * Math.PI * 2,
+                size: Math.random() < 0.1 ? 2 : 1 // Some bigger stars
             });
         }
     }
@@ -215,7 +284,7 @@ class MoonLander {
     
     checkFlatSurface(landerX) {
         const landerWidth = this.lander.width * 0.8; // Check area slightly smaller than lander
-        const segmentWidth = this.width / 80;
+        const segmentWidth = this.width / 120; // Updated for new segment count
         const centerSegment = Math.floor(landerX / segmentWidth);
         const checkRadius = Math.ceil(landerWidth / segmentWidth / 2);
         
@@ -230,7 +299,7 @@ class MoonLander {
         if (points.length < 3) return false;
         
         // Check if surface is relatively flat
-        const maxHeightDiff = 15; // Maximum height difference allowed
+        const maxHeightDiff = 20; // Maximum height difference allowed (slightly more lenient)
         const minY = Math.min(...points.map(p => p.y));
         const maxY = Math.max(...points.map(p => p.y));
         
@@ -305,10 +374,21 @@ class MoonLander {
             
             this.ctx.globalAlpha = brightness;
             this.ctx.fillStyle = '#fff';
-            this.ctx.fillRect(star.x, star.y, 1, 1);
+            
+            if (star.size === 2) {
+                // Bigger, brighter stars
+                this.ctx.fillRect(star.x - 1, star.y - 1, 2, 2);
+                if (brightness > 0.7) {
+                    this.ctx.fillStyle = '#ffffaa';
+                    this.ctx.fillRect(star.x - 2, star.y, 4, 1);
+                    this.ctx.fillRect(star.x, star.y - 2, 1, 4);
+                }
+            } else {
+                this.ctx.fillRect(star.x, star.y, 1, 1);
+            }
             
             // Add occasional bright sparkle
-            if (brightness > 0.8 && Math.random() < 0.01) {
+            if (brightness > 0.8 && Math.random() < 0.005) {
                 this.ctx.fillStyle = '#ffff88';
                 this.ctx.fillRect(star.x - 1, star.y, 3, 1);
                 this.ctx.fillRect(star.x, star.y - 1, 1, 3);
@@ -316,24 +396,65 @@ class MoonLander {
         });
         this.ctx.globalAlpha = 1;
         
-        // Draw Earth
-        this.ctx.fillStyle = '#4a90e2';
+        // Draw Earth with realistic appearance
+        const earthX = this.earth.x;
+        const earthY = this.earth.y;
+        const earthR = this.earth.radius;
+        
+        // Earth atmosphere glow
+        const gradient = this.ctx.createRadialGradient(earthX, earthY, earthR * 0.8, earthX, earthY, earthR * 1.2);
+        gradient.addColorStop(0, 'rgba(135, 206, 250, 0.3)');
+        gradient.addColorStop(1, 'rgba(135, 206, 250, 0)');
+        this.ctx.fillStyle = gradient;
         this.ctx.beginPath();
-        this.ctx.arc(this.earth.x, this.earth.y, this.earth.radius, 0, Math.PI * 2);
+        this.ctx.arc(earthX, earthY, earthR * 1.2, 0, Math.PI * 2);
         this.ctx.fill();
         
-        // Draw continents on Earth
-        this.ctx.fillStyle = '#2d5a2d';
+        // Earth base - blue oceans
+        this.ctx.fillStyle = '#1e3a8a';
         this.ctx.beginPath();
-        this.ctx.arc(this.earth.x - 8, this.earth.y - 5, 8, 0, Math.PI * 2);
-        this.ctx.fill();
-        this.ctx.beginPath();
-        this.ctx.arc(this.earth.x + 6, this.earth.y + 3, 6, 0, Math.PI * 2);
+        this.ctx.arc(earthX, earthY, earthR, 0, Math.PI * 2);
         this.ctx.fill();
         
-        // Draw terrain
-        this.ctx.strokeStyle = '#666';
-        this.ctx.fillStyle = '#333';
+        // Continents - realistic shapes
+        this.ctx.fillStyle = '#16a34a';
+        
+        // North America
+        this.ctx.beginPath();
+        this.ctx.ellipse(earthX - earthR * 0.3, earthY - earthR * 0.2, earthR * 0.25, earthR * 0.4, -0.2, 0, Math.PI * 2);
+        this.ctx.fill();
+        
+        // Europe/Africa
+        this.ctx.beginPath();
+        this.ctx.ellipse(earthX + earthR * 0.1, earthY - earthR * 0.1, earthR * 0.15, earthR * 0.5, 0.1, 0, Math.PI * 2);
+        this.ctx.fill();
+        
+        // Asia
+        this.ctx.beginPath();
+        this.ctx.ellipse(earthX + earthR * 0.4, earthY - earthR * 0.3, earthR * 0.2, earthR * 0.3, 0.3, 0, Math.PI * 2);
+        this.ctx.fill();
+        
+        // Cloud swirls
+        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+        this.ctx.beginPath();
+        this.ctx.ellipse(earthX - earthR * 0.2, earthY + earthR * 0.3, earthR * 0.3, earthR * 0.1, 0.5, 0, Math.PI * 2);
+        this.ctx.fill();
+        
+        this.ctx.beginPath();
+        this.ctx.ellipse(earthX + earthR * 0.3, earthY - earthR * 0.4, earthR * 0.2, earthR * 0.08, -0.3, 0, Math.PI * 2);
+        this.ctx.fill();
+        
+        // Terminator line (day/night)
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        this.ctx.beginPath();
+        this.ctx.arc(earthX, earthY, earthR, Math.PI * 0.3, Math.PI * 1.3);
+        this.ctx.closePath();
+        this.ctx.fill();
+        
+        // Draw moon terrain with realistic coloring and shadows
+        
+        // Main terrain fill - light gray like moon dust
+        this.ctx.fillStyle = '#d1d5db';
         this.ctx.beginPath();
         this.ctx.moveTo(0, this.height);
         this.terrain.forEach(point => {
@@ -342,7 +463,67 @@ class MoonLander {
         this.ctx.lineTo(this.width, this.height);
         this.ctx.closePath();
         this.ctx.fill();
+        
+        // Terrain outline - darker gray
+        this.ctx.strokeStyle = '#9ca3af';
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        this.terrain.forEach((point, i) => {
+            if (i === 0) {
+                this.ctx.moveTo(point.x, point.y);
+            } else {
+                this.ctx.lineTo(point.x, point.y);
+            }
+        });
         this.ctx.stroke();
+        
+        // Add shadows on steep slopes
+        this.ctx.fillStyle = '#6b7280';
+        for (let i = 1; i < this.terrain.length; i++) {
+            const prev = this.terrain[i - 1];
+            const curr = this.terrain[i];
+            const slope = (curr.y - prev.y) / (curr.x - prev.x);
+            
+            // Add shadow for steep downward slopes
+            if (slope > 0.5) {
+                this.ctx.beginPath();
+                this.ctx.moveTo(prev.x, prev.y);
+                this.ctx.lineTo(curr.x, curr.y);
+                this.ctx.lineTo(curr.x, this.height);
+                this.ctx.lineTo(prev.x, this.height);
+                this.ctx.closePath();
+                this.ctx.fill();
+            }
+        }
+        
+        // Draw rocks
+        this.ctx.fillStyle = '#9ca3af';
+        this.rocks.forEach(rock => {
+            this.ctx.beginPath();
+            this.ctx.arc(rock.x, rock.y, rock.size, 0, Math.PI * 2);
+            this.ctx.fill();
+            
+            // Rock shadow
+            this.ctx.fillStyle = '#4b5563';
+            this.ctx.beginPath();
+            this.ctx.ellipse(rock.x + rock.size * 0.3, rock.y + rock.size, rock.size * 0.8, rock.size * 0.3, 0, 0, Math.PI * 2);
+            this.ctx.fill();
+            this.ctx.fillStyle = '#9ca3af';
+        });
+        
+        // Highlight flat landing areas
+        this.ctx.strokeStyle = '#fbbf24';
+        this.ctx.lineWidth = 1;
+        for (let i = 0; i < this.terrain.length - 5; i++) {
+            if (this.checkFlatSurface(this.terrain[i].x)) {
+                const segment = Math.min(5, this.terrain.length - i - 1);
+                this.ctx.beginPath();
+                this.ctx.moveTo(this.terrain[i].x, this.terrain[i].y);
+                this.ctx.lineTo(this.terrain[i + segment].x, this.terrain[i + segment].y);
+                this.ctx.stroke();
+                i += segment; // Skip ahead to avoid overlapping highlights
+            }
+        }
         
         
         // Draw particles
