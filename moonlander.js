@@ -32,7 +32,6 @@ class MoonLander {
         
         // Terrain
         this.terrain = [];
-        this.landingPads = [];
         
         // Background elements
         this.stars = [];
@@ -88,19 +87,6 @@ class MoonLander {
             this.terrain.push({ x, y });
         }
         
-        // Create landing pads (flat areas)
-        this.landingPads = [
-            { start: Math.floor(segments * 0.3), end: Math.floor(segments * 0.35) },
-            { start: Math.floor(segments * 0.7), end: Math.floor(segments * 0.75) }
-        ];
-        
-        // Flatten landing pads
-        this.landingPads.forEach(pad => {
-            const avgY = (this.terrain[pad.start].y + this.terrain[pad.end].y) / 2;
-            for (let i = pad.start; i <= pad.end; i++) {
-                this.terrain[i].y = avgY;
-            }
-        });
     }
     
     generateStars() {
@@ -227,6 +213,30 @@ class MoonLander {
         }
     }
     
+    checkFlatSurface(landerX) {
+        const landerWidth = this.lander.width * 0.8; // Check area slightly smaller than lander
+        const segmentWidth = this.width / 80;
+        const centerSegment = Math.floor(landerX / segmentWidth);
+        const checkRadius = Math.ceil(landerWidth / segmentWidth / 2);
+        
+        // Get terrain points around lander position
+        const points = [];
+        for (let i = centerSegment - checkRadius; i <= centerSegment + checkRadius; i++) {
+            if (i >= 0 && i < this.terrain.length) {
+                points.push(this.terrain[i]);
+            }
+        }
+        
+        if (points.length < 3) return false;
+        
+        // Check if surface is relatively flat
+        const maxHeightDiff = 15; // Maximum height difference allowed
+        const minY = Math.min(...points.map(p => p.y));
+        const maxY = Math.max(...points.map(p => p.y));
+        
+        return (maxY - minY) <= maxHeightDiff;
+    }
+    
     checkCollision() {
         const landerBottom = this.lander.y + this.lander.height;
         const landerLeft = this.lander.x - this.lander.width / 2;
@@ -244,12 +254,10 @@ class MoonLander {
                 if (landerBottom >= terrainHeight) {
                     // Check if it's a safe landing
                     const speed = Math.sqrt(this.lander.vx * this.lander.vx + this.lander.vy * this.lander.vy);
-                    const isOnLandingPad = this.landingPads.some(pad => {
-                        const segmentWidth = this.width / 80;
-                        return this.lander.x >= pad.start * segmentWidth && this.lander.x <= pad.end * segmentWidth;
-                    });
+                    // Check if landing area is flat enough
+                    const isOnFlatSurface = this.checkFlatSurface(this.lander.x);
                     
-                    if (speed < 6 && Math.abs(this.lander.angle) < 0.5 && isOnLandingPad) {
+                    if (speed < 3 && Math.abs(this.lander.angle) < 0.3 && isOnFlatSurface) {
                         // Safe landing
                         this.gameState = 'landed';
                         this.lander.vx = 0;
@@ -336,21 +344,6 @@ class MoonLander {
         this.ctx.fill();
         this.ctx.stroke();
         
-        // Highlight landing pads
-        this.ctx.strokeStyle = '#0f0';
-        this.ctx.lineWidth = 3;
-        this.landingPads.forEach(pad => {
-            const segmentWidth = this.width / 80;
-            const startX = pad.start * segmentWidth;
-            const endX = pad.end * segmentWidth;
-            const y = this.terrain[pad.start].y;
-            
-            this.ctx.beginPath();
-            this.ctx.moveTo(startX, y);
-            this.ctx.lineTo(endX, y);
-            this.ctx.stroke();
-        });
-        this.ctx.lineWidth = 1;
         
         // Draw particles
         this.particles.forEach(particle => {
